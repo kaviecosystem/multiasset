@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MultiAsset Vault</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0d1119; --surface:#151c28; --surface-2:#1b2432;
+    --line:#26303f; --line-soft:#1f2836;
+    --text:#e7ecf5; --muted:#8b97ab; --faint:#5f6b7e;
+    --accent:#37e0c1; --accent-ink:#04211c;
+    --btc:#f7931a; --bnb:#f3ba2f; --eth:#7b8cf0; --kavi:#37e0c1;
+    --danger:#ff6b6b; --ok:#37e0c1;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:460px; margin:0 auto; padding:14px 14px 40px;}
+  .mono{font-variant-numeric:tabular-nums}
+  .num{font-family:"Space Grotesk",Inter,sans-serif; font-variant-numeric:tabular-nums;}
+
+  /* top bar */
+  .top{display:flex; align-items:center; gap:10px; padding:6px 2px 16px;}
+  .brand{font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:17px; letter-spacing:-.01em;}
+  .net{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);
+    background:var(--surface); border:1px solid var(--line); padding:5px 9px; border-radius:999px;}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--faint)}
+  .dot.on{background:var(--ok); box-shadow:0 0 0 3px rgba(55,224,193,.15)}
+  .dot.bad{background:var(--danger)}
+  .spacer{flex:1}
+  .acct{font-size:12.5px; color:var(--muted); background:var(--surface); border:1px solid var(--line);
+    padding:7px 11px; border-radius:999px; cursor:pointer;}
+
+  /* cards */
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+    padding:16px; margin-bottom:14px;}
+  .card h2{margin:0 0 14px; font-size:12.5px; font-weight:600; color:var(--muted); letter-spacing:.02em;}
+
+  .balrow{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px;}
+  .balrow .lbl{font-size:12.5px; color:var(--muted)}
+  .balrow .val{font-size:15px} .balrow .val b{font-weight:600}
+
+  .field{position:relative; margin-bottom:14px;}
+  .field input{width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    font-family:"Space Grotesk",sans-serif; font-size:26px; font-weight:600; padding:16px 74px 16px 16px;
+    border-radius:12px; outline:none;}
+  .field input:focus{border-color:var(--accent)}
+  .field .suffix{position:absolute; right:14px; top:50%; transform:translateY(-50%);
+    display:flex; align-items:center; gap:8px;}
+  .field .unit{font-size:13px; color:var(--muted)}
+  .maxbtn{font-size:11px; font-weight:600; color:var(--accent); background:rgba(55,224,193,.1);
+    border:1px solid rgba(55,224,193,.28); padding:5px 8px; border-radius:8px; cursor:pointer;}
+
+  /* allocation bar — the hero element */
+  .alloc{margin:2px 0 6px}
+  .allocbar{display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--bg);}
+  .seg{height:100%}
+  .allocleg{display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:11px}
+  .leg{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted)}
+  .leg .sw{width:9px; height:9px; border-radius:3px}
+  .leg b{color:var(--text); font-weight:600; font-family:"Space Grotesk",sans-serif}
+
+  .btn{display:block; width:100%; border:none; border-radius:12px; padding:15px;
+    font-family:Inter,sans-serif; font-size:15px; font-weight:600; cursor:pointer; margin-top:2px;
+    transition:opacity .15s, transform .05s;}
+  .btn:active{transform:scale(.992)}
+  .btn.primary{background:var(--accent); color:var(--accent-ink)}
+  .btn.ghost{background:var(--surface-2); color:var(--text); border:1px solid var(--line)}
+  .btn:disabled{opacity:.45; cursor:not-allowed}
+  .hint{margin:11px 2px 0; font-size:12px; color:var(--faint); text-align:center; line-height:1.5}
+
+  /* positions */
+  .pos{border:1px solid var(--line-soft); border-radius:12px; padding:13px 14px; margin-bottom:11px; background:var(--surface-2);}
+  .pos:last-child{margin-bottom:0}
+  .pos .hd{display:flex; align-items:center; justify-content:space-between; margin-bottom:11px}
+  .pos .id{font-size:12.5px; color:var(--muted)}
+  .status{font-size:12px; font-weight:600; padding:4px 9px; border-radius:999px}
+  .status.lock{color:var(--bnb); background:rgba(243,186,47,.12)}
+  .status.ready{color:var(--ok); background:rgba(55,224,193,.12)}
+  .status.done{color:var(--faint); background:rgba(255,255,255,.04)}
+  .cd{font-family:"Space Grotesk",sans-serif; font-size:19px; font-weight:600; margin-bottom:12px; letter-spacing:-.01em}
+  .cd small{font-size:12px; color:var(--muted); font-weight:400; font-family:Inter}
+  .holds{display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; margin-bottom:12px}
+  .hold{display:flex; align-items:center; gap:8px; font-size:13px}
+  .hold .sw{width:8px; height:8px; border-radius:3px; flex:none}
+  .hold .t{color:var(--muted)} .hold .a{margin-left:auto; font-family:"Space Grotesk",sans-serif; font-variant-numeric:tabular-nums}
+  .pos .btn{padding:11px; font-size:14px}
+
+  .empty{color:var(--faint); font-size:13.5px; text-align:center; padding:18px 6px; line-height:1.6}
+
+  .foot{text-align:center; font-size:11.5px; color:var(--faint); margin-top:6px; line-height:1.7}
+  .foot a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line)}
+
+  /* banner */
+  .banner{display:none; background:rgba(255,107,107,.1); border:1px solid rgba(255,107,107,.3);
+    color:#ffb4b4; border-radius:12px; padding:12px 14px; font-size:13px; margin-bottom:14px;}
+  .banner.show{display:flex; align-items:center; gap:10px; justify-content:space-between}
+  .banner button{font-size:12.5px; font-weight:600; background:var(--danger); color:#fff; border:none;
+    padding:8px 12px; border-radius:9px; cursor:pointer; flex:none}
+
+  /* toast */
+  .toast{position:fixed; left:50%; bottom:calc(18px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%);
+    max-width:92%; background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    padding:12px 16px; border-radius:12px; font-size:13px; box-shadow:0 10px 30px rgba(0,0,0,.4);
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:rgba(255,107,107,.5)}
+  .toast a{color:var(--accent); text-decoration:none}
+  .spin{display:inline-block; width:13px; height:13px; border:2px solid var(--muted); border-top-color:transparent;
+    border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span class="brand">MultiAsset Vault</span>
+    <span class="spacer"></span>
+    <span class="net" id="net"><span class="dot" id="netdot"></span><span id="netlbl">Not connected</span></span>
+  </div>
+
+  <div class="banner" id="wrongnet">
+    <span>Wrong network. This vault runs on BNB Smart Chain.</span>
+    <button id="switchBtn">Switch</button>
+  </div>
+
+  <!-- DEPOSIT -->
+  <div class="card">
+    <h2>Deposit</h2>
+
+    <div class="balrow">
+      <span class="lbl">Your USDT</span>
+      <span class="val"><b class="num" id="usdtBal">—</b> USDT</span>
+    </div>
+
+    <div class="field">
+      <input id="amount" type="text" inputmode="decimal" placeholder="0.0" autocomplete="off" />
+      <div class="suffix">
+        <button class="maxbtn" id="maxBtn">MAX</button>
+        <span class="unit">USDT</span>
+      </div>
+    </div>
+
+    <div class="alloc">
+      <div class="allocbar">
+        <div class="seg" style="width:20%;background:var(--btc)"></div>
+        <div class="seg" style="width:20%;background:var(--bnb)"></div>
+        <div class="seg" style="width:20%;background:var(--eth)"></div>
+        <div class="seg" style="width:40%;background:var(--kavi)"></div>
+      </div>
+      <div class="allocleg">
+        <span class="leg"><span class="sw" style="background:var(--btc)"></span><b>20%</b> BTC</span>
+        <span class="leg"><span class="sw" style="background:var(--bnb)"></span><b>20%</b> BNB</span>
+        <span class="leg"><span class="sw" style="background:var(--eth)"></span><b>20%</b> ETH</span>
+        <span class="leg"><span class="sw" style="background:var(--kavi)"></span><b>40%</b> KAVI</span>
+      </div>
+    </div>
+
+    <button class="btn primary" id="actionBtn" style="margin-top:16px">Connect wallet</button>
+    <p class="hint">Minimum 10 USDT · locked for 3 years · no early exit</p>
+  </div>
+
+  <!-- POSITIONS -->
+  <div class="card">
+    <h2>Your positions</h2>
+    <div id="positions"><div class="empty">Connect your wallet to see deposits.</div></div>
+  </div>
+
+  <div class="foot">
+    Contract <a id="scan" href="#" target="_blank" rel="noopener">0xf0C0…582f</a><br/>
+    Verify all details before depositing. This is not financial advice.
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- config (addresses lowercased to avoid checksum errors) ----
+  var VAULT = "0xf0c02ba7ed1344bdc88809fe6b01ff155050582f";
+  var USDT  = "0x55d398326f99059ff775485246999027b3197955";
+  var CHAIN_ID = 56n;
+  var CHAIN_HEX = "0x38";
+  var SCAN = "https://bscscan.com/address/0xf0C02Ba7Ed1344bDC88809fE6B01FF155050582f";
+
+  var ASSETS = [
+    { key:"BTC",  addr:"0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c", color:"var(--btc)" },
+    { key:"BNB",  addr:"0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", color:"var(--bnb)" },
+    { key:"ETH",  addr:"0x2170ed0880ac9a755fd29b2688956bd959f933f8", color:"var(--eth)" },
+    { key:"KAVI", addr:null, color:"var(--kavi)" } // filled from contract.KAVI()
+  ];
+
+  var USDT_ABI = [
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address,address) view returns (uint256)",
+    "function approve(address,uint256) returns (bool)",
+    "function decimals() view returns (uint8)"
+  ];
+  var VAULT_ABI = [
+    "function deposit(uint256)",
+    "function withdraw(uint256)",
+    "function positionsCount(address) view returns (uint256)",
+    "function getPosition(address,uint256) view returns (tuple(uint64 unlockTime, bool withdrawn, uint256[4] amounts))",
+    "function MIN_DEPOSIT() view returns (uint256)",
+    "function KAVI() view returns (address)",
+    "function paused() view returns (bool)"
+  ];
+
+  var E = ethers;
+  var provider, signer, account, vault, usdt;
+  var state = { positions:[], allowance:0n, bal:0n, connected:false, right:false };
+
+  var $ = function(id){ return document.getElementById(id); };
+  document.getElementById("scan").href = SCAN;
+
+  // ---------- helpers ----------
+  function short(a){ return a.slice(0,6)+"…"+a.slice(-4); }
+  function fmt(bn){
+    var n = parseFloat(E.formatUnits(bn, 18));
+    if (n === 0) return "0";
+    if (n >= 1000) return n.toLocaleString(undefined,{maximumFractionDigits:2});
+    if (n >= 1) return n.toLocaleString(undefined,{maximumFractionDigits:4});
+    return Number(n.toPrecision(4)).toString();
+  }
+  var toastT;
+  function toast(msg, kind, sticky){
+    var t = $("toast");
+    t.className = "toast show" + (kind==="err"?" err":"");
+    t.innerHTML = msg;
+    clearTimeout(toastT);
+    if(!sticky) toastT = setTimeout(function(){ t.className="toast"; }, 4500);
+  }
+  function hideToast(){ clearTimeout(toastT); $("toast").className="toast"; }
+
+  // ---------- wallet ----------
+  async function connect(){
+    if (!window.ethereum){
+      toast("No wallet found. Open this page inside a wallet's browser (MetaMask, Trust Wallet) or install MetaMask.", "err", true);
+      return;
+    }
+    try{
+      provider = new E.BrowserProvider(window.ethereum, "any");
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      account = (await signer.getAddress()).toLowerCase();
+      state.connected = true;
+
+      var net = await provider.getNetwork();
+      state.right = (net.chainId === CHAIN_ID);
+
+      vault = new E.Contract(VAULT, VAULT_ABI, signer);
+      usdt  = new E.Contract(USDT,  USDT_ABI,  signer);
+
+      if (state.right && !ASSETS[3].addr){
+        try{ ASSETS[3].addr = (await vault.KAVI()).toLowerCase(); }catch(e){}
+      }
+
+      wireEvents();
+      renderTop();
+      await refresh();
+    }catch(err){
+      toast(prettyErr(err), "err");
+    }
+  }
+
+  function wireEvents(){
+    if (!window.ethereum || window.ethereum.__wired) return;
+    window.ethereum.__wired = true;
+    window.ethereum.on("accountsChanged", function(){ location.reload(); });
+    window.ethereum.on("chainChanged", function(){ location.reload(); });
+  }
+
+  async function switchChain(){
+    try{
+      await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:CHAIN_HEX}] });
+    }catch(e){
+      if (e && e.code === 4902){
+        await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{
+          chainId:CHAIN_HEX, chainName:"BNB Smart Chain",
+          nativeCurrency:{name:"BNB",symbol:"BNB",decimals:18},
+          rpcUrls:["https://bsc-dataseed.binance.org"],
+          blockExplorerUrls:["https://bscscan.com"]
+        }]});
+      }
+    }
+  }
+
+  // ---------- data ----------
+  async function refresh(){
+    if (!state.connected) return;
+    renderTop();
+    if (!state.right){ renderAction(); renderPositions(); return; }
+    try{
+      state.bal = await usdt.balanceOf(account);
+      state.allowance = await usdt.allowance(account, VAULT);
+      $("usdtBal").textContent = fmt(state.bal);
+
+      var count = Number(await vault.positionsCount(account));
+      var arr = [];
+      for (var i=0;i<count;i++){
+        var p = await vault.getPosition(account, i);
+        arr.push({
+          index:i,
+          unlock: Number(p.unlockTime),
+          withdrawn: p.withdrawn,
+          amounts: [p.amounts[0], p.amounts[1], p.amounts[2], p.amounts[3]]
+        });
+      }
+      state.positions = arr;
+      renderPositions();
+      renderAction();
+    }catch(err){
+      toast(prettyErr(err), "err");
+    }
+  }
+
+  // ---------- render ----------
+  function renderTop(){
+    var dot = $("netdot"), lbl = $("netlbl");
+    if (!state.connected){ dot.className="dot"; lbl.textContent="Not connected"; }
+    else if (state.right){ dot.className="dot on"; lbl.textContent="BSC · "+short(account); }
+    else { dot.className="dot bad"; lbl.textContent="Wrong network"; }
+    $("wrongnet").className = "banner" + ((state.connected && !state.right) ? " show" : "");
+  }
+
+  function currentAmount(){
+    var v = $("amount").value.trim();
+    if (!v) return null;
+    try{ return E.parseUnits(v, 18); }catch(e){ return null; }
+  }
+
+  function renderAction(){
+    var btn = $("actionBtn");
+    if (!state.connected){ btn.textContent="Connect wallet"; btn.disabled=false; btn.className="btn primary"; return; }
+    if (!state.right){ btn.textContent="Switch to BSC"; btn.disabled=false; btn.className="btn primary"; return; }
+
+    var amt = currentAmount();
+    var min = E.parseUnits("10", 18);
+    if (amt === null || amt <= 0n){ btn.textContent="Enter an amount"; btn.disabled=true; btn.className="btn primary"; return; }
+    if (amt < min){ btn.textContent="Minimum 10 USDT"; btn.disabled=true; btn.className="btn primary"; return; }
+    if (amt > state.bal){ btn.textContent="Not enough USDT"; btn.disabled=true; btn.className="btn primary"; return; }
+
+    btn.disabled=false;
+    if (state.allowance < amt){ btn.textContent="Approve USDT"; btn.className="btn ghost"; }
+    else { btn.textContent="Deposit "+fmt(amt)+" USDT"; btn.className="btn primary"; }
+  }
+
+  function countdownText(p){
+    if (p.withdrawn) return { txt:"Withdrawn", cls:"done", ready:false };
+    var now = Math.floor(Date.now()/1000);
+    var left = p.unlock - now;
+    if (left <= 0) return { txt:"Ready to withdraw", cls:"ready", ready:true };
+    var y=Math.floor(left/31536000); left-=y*31536000;
+    var mo=Math.floor(left/2592000); left-=mo*2592000;
+    var d=Math.floor(left/86400); left-=d*86400;
+    var h=Math.floor(left/3600); left-=h*3600;
+    var m=Math.floor(left/60); var s=left-m*60;
+    var big;
+    if (y>0) big = y+"y "+mo+"mo "+d+"d";
+    else if (mo>0) big = mo+"mo "+d+"d "+h+"h";
+    else if (d>0) big = d+"d "+h+"h "+m+"m";
+    else big = String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+    return { txt:big, cls:"lock", ready:false };
+  }
+
+  function renderPositions(){
+    var host = $("positions");
+    if (!state.right){ host.innerHTML='<div class="empty">Switch to BNB Smart Chain to load your deposits.</div>'; return; }
+    if (!state.positions.length){ host.innerHTML='<div class="empty">No deposits yet.<br/>Your first deposit will appear here with its 3-year countdown.</div>'; return; }
+
+    host.innerHTML = state.positions.map(function(p){
+      var cd = countdownText(p);
+      var unlockDate = new Date(p.unlock*1000).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+      var holds = ASSETS.map(function(a,i){
+        return '<div class="hold"><span class="sw" style="background:'+a.color+'"></span>'+
+               '<span class="t">'+a.key+'</span><span class="a">'+fmt(p.amounts[i])+'</span></div>';
+      }).join("");
+      var statusLbl = p.withdrawn ? "Withdrawn" : (cd.ready ? "Unlocked" : "Locked");
+      var btn = p.withdrawn
+        ? ''
+        : '<button class="btn '+(cd.ready?"primary":"ghost")+'" data-wd="'+p.index+'" '+(cd.ready?"":"disabled")+'>'+
+          (cd.ready?"Withdraw":"Locked until "+unlockDate)+'</button>';
+      return '<div class="pos" data-idx="'+p.index+'">'+
+        '<div class="hd"><span class="id">Deposit #'+p.index+'</span>'+
+        '<span class="status '+cd.cls+'">'+statusLbl+'</span></div>'+
+        '<div class="cd" data-cd="'+p.index+'">'+cd.txt+(p.withdrawn?'':' <small>· unlocks '+unlockDate+'</small>')+'</div>'+
+        '<div class="holds">'+holds+'</div>'+ btn +'</div>';
+    }).join("");
+
+    Array.prototype.forEach.call(host.querySelectorAll("[data-wd]"), function(b){
+      b.addEventListener("click", function(){ withdraw(Number(b.getAttribute("data-wd"))); });
+    });
+  }
+
+  // live countdown tick (updates text only, no re-fetch)
+  setInterval(function(){
+    if (!state.positions.length) return;
+    state.positions.forEach(function(p){
+      if (p.withdrawn) return;
+      var el = document.querySelector('[data-cd="'+p.index+'"]');
+      if (!el) return;
+      var cd = countdownText(p);
+      var date = new Date(p.unlock*1000).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+      el.innerHTML = cd.txt + ' <small>· unlocks '+date+'</small>';
+      if (cd.ready){ var pos=el.closest(".pos"); if(pos && pos.getAttribute("data-refreshed")!=="1"){ pos.setAttribute("data-refreshed","1"); refresh(); } }
+    });
+  }, 1000);
+
+  // ---------- actions ----------
+  async function onAction(){
+    if (!state.connected){ return connect(); }
+    if (!state.right){ return switchChain(); }
+    var amt = currentAmount();
+    if (amt === null) return;
+    if (state.allowance < amt) return approve(amt);
+    return deposit(amt);
+  }
+
+  async function approve(amt){
+    try{
+      toast('<span class="spin"></span>Approving USDT…', "", true);
+      var tx = await usdt.approve(VAULT, amt);
+      await tx.wait();
+      hideToast();
+      state.allowance = await usdt.allowance(account, VAULT);
+      renderAction();
+      toast("USDT approved. Tap Deposit to continue.");
+    }catch(err){ hideToast(); toast(prettyErr(err), "err"); }
+  }
+
+  async function deposit(amt){
+    try{
+      toast('<span class="spin"></span>Depositing… confirm in your wallet', "", true);
+      var tx = await vault.deposit(amt);
+      toast('<span class="spin"></span>Swapping into BTC / BNB / ETH / KAVI…', "", true);
+      var r = await tx.wait();
+      hideToast();
+      $("amount").value = "";
+      await refresh();
+      toast('Deposit complete. <a href="https://bscscan.com/tx/'+r.hash+'" target="_blank" rel="noopener">View</a>');
+    }catch(err){ hideToast(); toast(prettyErr(err), "err"); }
+  }
+
+  async function withdraw(index){
+    try{
+      toast('<span class="spin"></span>Withdrawing deposit #'+index+'…', "", true);
+      var tx = await vault.withdraw(index);
+      var r = await tx.wait();
+      hideToast();
+      await refresh();
+      toast('Withdrawn. <a href="https://bscscan.com/tx/'+r.hash+'" target="_blank" rel="noopener">View</a>');
+    }catch(err){ hideToast(); toast(prettyErr(err), "err"); }
+  }
+
+  function prettyErr(err){
+    var m = (err && (err.shortMessage || err.reason || err.message)) || "Something went wrong";
+    if (err && (err.code === "ACTION_REJECTED" || err.code === 4001)) return "You rejected the request in your wallet.";
+    if (/insufficient funds/i.test(m)) return "Not enough BNB for gas.";
+    if (/minimum 10/i.test(m)) return "Minimum deposit is 10 USDT.";
+    if (m.length > 120) m = m.slice(0,117)+"…";
+    return m;
+  }
+
+  // ---------- listeners ----------
+  $("actionBtn").addEventListener("click", onAction);
+  $("switchBtn").addEventListener("click", switchChain);
+  $("maxBtn").addEventListener("click", function(){
+    if (!state.connected || !state.right) return;
+    $("amount").value = E.formatUnits(state.bal, 18);
+    renderAction();
+  });
+  $("amount").addEventListener("input", renderAction);
+
+  // eager connect if already authorized
+  if (window.ethereum && window.ethereum.selectedAddress){ connect(); }
+})();
+</script>
+</body>
+</html>
